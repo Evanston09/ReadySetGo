@@ -34,7 +34,7 @@ const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.CLIENTID;
 
 if (!token) {
-	console.error('Missing TOKEN environment variable');
+	console.error('Missing DISCORD_TOKEN environment variable');
 	process.exit(1);
 }
 
