@@ -1,6 +1,7 @@
 import { ChannelType, Events, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import type {Interaction, CacheType, TextChannel} from 'discord.js'
 import { getSignupDetails } from '../airtable.js';
+import { appendRegistrationLog } from '../logging.js';
 import 'dotenv/config'
 
 // Assertations needed because it executes in a diff scope where the type narrowing dosent apply
@@ -32,14 +33,33 @@ export const name = Events.InteractionCreate
 export async function execute(interaction: Interaction<CacheType>) {
 	if (!interaction.isModalSubmit()) return;
 
-	if (interaction.customId === 'emailModal') {
+    if (interaction.customId === 'emailModal') {
         const email = interaction.fields.getTextInputValue('emailInput');
         if (!interaction.guild) return;
 
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-        const signupDetails = await getSignupDetails(email)
+        let signupDetails;
+        try {
+            signupDetails = await getSignupDetails(email)
+        } catch (error) {
+            console.error('Failed to lookup signup details', error);
+            await appendRegistrationLog({
+                timestamp: new Date().toISOString(),
+                status: 'error',
+                discordUserId: interaction.user.id,
+                email,
+            });
+            await interaction.editReply({ content: 'Something went wrong while verifying your email. Please try again later.' });
+            return;
+        }
         if (!signupDetails) {
+            await appendRegistrationLog({
+                timestamp: new Date().toISOString(),
+                status: 'not_found',
+                discordUserId: interaction.user.id,
+                email,
+            });
             await interaction.editReply({ content: `This email does not seem to be associated with any known Ready, Set, App! teams :cry:\nIf you need help, please DM <@${contactUserId}>` });
             return;
         }
@@ -103,6 +123,15 @@ export async function execute(interaction: Interaction<CacheType>) {
             })
         }
 
+        await appendRegistrationLog({
+            timestamp: new Date().toISOString(),
+            status: 'success',
+            discordUserId: interaction.user.id,
+            email,
+            teamName: signupDetails.team,
+            internDiscordId: signupDetails.internDiscordId,
+        });
+
         await interaction.editReply({ content: `You've been added to <#${channel.id}>!` })
-	}
+    }
 }

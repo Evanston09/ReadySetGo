@@ -41,6 +41,7 @@ Create a `.env` file with the following:
 | `CONTACT_USER_ID` | Discord user ID to direct users to if their email isn't found |
 | `REGISTERED_ROLE_ID` | Role ID to assign on successful registration |
 | `GUILD_ID` | Discord guild ID for the backfill script |
+| `REGISTRATION_LOG_PATH` | JSONL log file path (default: `/data/registrations.jsonl`) |
 
 ### Deploy Commands and Run
 
@@ -48,6 +49,18 @@ Create a `.env` file with the following:
 npx tsc && node dist/deploy.js
 node dist/index.js
 ```
+
+### Docker Logging
+
+By default the bot appends registration logs to `/data/registrations.jsonl`. Mount a host directory to `/data` so logs persist outside the container.
+
+Example `docker run`:
+
+```
+docker run --env-file .env -v "$(pwd)/data:/data" your-image
+```
+
+You can override the log path with `REGISTRATION_LOG_PATH`.
 
 ### Backfill Registered Role (Local Script)
 
