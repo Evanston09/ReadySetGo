@@ -39,10 +39,21 @@ Create a `.env` file with the following:
 | `TEAM_CATEGORY_ID` | ID of the Discord category to create team channels under |
 | `LEAD_INTERN_ROLE_ID` | ID of the Lead Intern role (gets view access to all team channels) |
 | `CONTACT_USER_ID` | Discord user ID to direct users to if their email isn't found |
+| `REGISTERED_ROLE_ID` | Role ID to assign on successful registration |
+| `GUILD_ID` | Discord guild ID for the backfill script |
 
 ### Deploy Commands and Run
 
 ```
 npx tsc && node dist/deploy.js
 node dist/index.js
+```
+
+### Backfill Registered Role (Local Script)
+
+Use this once to grant the Registered role to members who can view team channels under `TEAM_CATEGORY_ID`.
+
+```
+npx tsc
+node dist/backfill-registered.js
 ```

@@ -22,6 +22,12 @@ if (!contactUserId) {
     process.exit(1);
 }
 
+const registeredRoleId = process.env.REGISTERED_ROLE_ID as string;
+if (!registeredRoleId) {
+    console.error('Missing REGISTERED_ROLE_ID environment variable');
+    process.exit(1);
+}
+
 export const name = Events.InteractionCreate
 export async function execute(interaction: Interaction<CacheType>) {
 	if (!interaction.isModalSubmit()) return;
@@ -45,7 +51,14 @@ export async function execute(interaction: Interaction<CacheType>) {
         // Must cache the intern
         await interaction.guild.members.fetch(signupDetails.internDiscordId)
 
+        const registeredRole = await interaction.guild.roles.fetch(registeredRoleId)
+        if (!registeredRole) {
+            await interaction.editReply({ content: 'Registered role is missing. Please contact an admin.' })
+            return
+        }
+
         await member.setNickname(`${signupDetails.fname}`)
+        await member.roles.add(registeredRole, 'Registered after email verification')
 
         let channel = interaction.guild.channels.cache.find(
             ch => ch.name === channelName && ch.type === ChannelType.GuildText
