@@ -3,8 +3,8 @@ import { ChannelType, Client, GatewayIntentBits, OverwriteType, PermissionFlagsB
 
 const token = process.env.DISCORD_TOKEN as string;
 const guildId = process.env.GUILD_ID as string;
-const teamCategoryId = process.env.TEAM_CATEGORY_ID as string;
 const registeredRoleId = process.env.REGISTERED_ROLE_ID as string;
+const internToTeamRaw = process.env.INTERN_TO_TEAM as string;
 
 if (!token) {
   console.error('Missing DISCORD_TOKEN environment variable');
@@ -16,15 +16,17 @@ if (!guildId) {
   process.exit(1);
 }
 
-if (!teamCategoryId) {
-  console.error('Missing TEAM_CATEGORY_ID environment variable');
-  process.exit(1);
-}
-
 if (!registeredRoleId) {
   console.error('Missing REGISTERED_ROLE_ID environment variable');
   process.exit(1);
 }
+
+if (!internToTeamRaw) {
+  console.error('Missing INTERN_TO_TEAM environment variable');
+  process.exit(1);
+}
+
+const internIds = Object.keys(JSON.parse(internToTeamRaw));
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
@@ -34,11 +36,7 @@ async function run() {
   await client.login(token);
 
   const guild = await client.guilds.fetch(guildId);
-  const category = await guild.channels.fetch(teamCategoryId);
-  if (!category || category.type !== ChannelType.GuildCategory) {
-    console.error('TEAM_CATEGORY_ID must reference a category channel');
-    process.exit(1);
-  }
+  await guild.channels.fetch();
 
   const registeredRole = await guild.roles.fetch(registeredRoleId);
   if (!registeredRole) {
@@ -48,8 +46,22 @@ async function run() {
 
   await guild.members.fetch();
 
+  const internCategoryIds = new Set<string>();
+  for (const internId of internIds) {
+    const category = guild.channels.cache.find(
+      ch => ch.type === ChannelType.GuildCategory
+        && 'permissionOverwrites' in ch
+        && ch.permissionOverwrites.cache.some(
+          ow => ow.type === OverwriteType.Member
+            && ow.id === internId
+            && ow.allow.has(PermissionFlagsBits.ManageChannels)
+        )
+    );
+    if (category) internCategoryIds.add(category.id);
+  }
+
   const channels = guild.channels.cache.filter(
-    (channel) => channel.parentId === teamCategoryId && channel.type === ChannelType.GuildText
+    (channel) => channel.parentId !== null && internCategoryIds.has(channel.parentId) && channel.type === ChannelType.GuildText
   );
 
   let added = 0;

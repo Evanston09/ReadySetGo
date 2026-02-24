@@ -1,15 +1,8 @@
-import { ChannelType, Events, MessageFlags, PermissionFlagsBits } from 'discord.js';
-import type {Interaction, CacheType, TextChannel} from 'discord.js'
+import { ChannelType, Events, MessageFlags, OverwriteType, PermissionFlagsBits } from 'discord.js';
+import type {Interaction, CacheType, TextChannel, Guild} from 'discord.js'
 import { getSignupDetails } from '../airtable.js';
 import { appendRegistrationLog } from '../logging.js';
 import 'dotenv/config'
-
-// Assertations needed because it executes in a diff scope where the type narrowing dosent apply
-const teamCategoryId = process.env.TEAM_CATEGORY_ID as string;
-if (!teamCategoryId) {
-    console.error('Missing TEAM_CATEGORY_ID environment variable');
-    process.exit(1);
-}
 
 const leadInternRoleId = process.env.LEAD_INTERN_ROLE_ID as string;
 if (!leadInternRoleId) {
@@ -27,6 +20,67 @@ const registeredRoleId = process.env.REGISTERED_ROLE_ID as string;
 if (!registeredRoleId) {
     console.error('Missing REGISTERED_ROLE_ID environment variable');
     process.exit(1);
+}
+
+const internCategoryCache = new Map<string, string>();
+
+async function getOrCreateInternCategory(
+    guild: Guild,
+    internDiscordId: string,
+    botId: string,
+    leadInternRoleId: string,
+): Promise<string> {
+    const cached = internCategoryCache.get(internDiscordId);
+    if (cached) {
+        // Verify the cached category still exists
+        const existing = guild.channels.cache.get(cached);
+        if (existing) return cached;
+        internCategoryCache.delete(internDiscordId);
+    }
+
+    const existingCategory = guild.channels.cache.find(
+        ch => ch.type === ChannelType.GuildCategory
+            && 'permissionOverwrites' in ch
+            && ch.permissionOverwrites.cache.some(
+                ow => ow.type === OverwriteType.Member
+                    && ow.id === internDiscordId
+                    && ow.allow.has(PermissionFlagsBits.ManageChannels)
+            )
+    );
+
+    if (existingCategory) {
+        internCategoryCache.set(internDiscordId, existingCategory.id);
+        return existingCategory.id;
+    }
+
+    const internMember = await guild.members.fetch(internDiscordId);
+    const displayName = internMember.displayName;
+
+    const category = await guild.channels.create({
+        name: `${displayName}'s Teams`,
+        type: ChannelType.GuildCategory,
+        permissionOverwrites: [
+            {
+                id: guild.id,
+                deny: [PermissionFlagsBits.ViewChannel],
+            },
+            {
+                id: botId,
+                allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.SendMessages],
+            },
+            {
+                id: leadInternRoleId,
+                allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels],
+            },
+            {
+                id: internDiscordId,
+                allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels],
+            },
+        ],
+    });
+
+    internCategoryCache.set(internDiscordId, category.id);
+    return category.id;
 }
 
 export const name = Events.InteractionCreate
@@ -92,10 +146,17 @@ export async function execute(interaction: Interaction<CacheType>) {
                 SendMessages: true,
             })
         } else {
+            const categoryId = await getOrCreateInternCategory(
+                interaction.guild,
+                signupDetails.internDiscordId,
+                interaction.client.user.id,
+                leadInternRoleId,
+            );
+
             channel = await interaction.guild.channels.create({
                 name: channelName,
                 type: ChannelType.GuildText,
-                parent: teamCategoryId,
+                parent: categoryId,
                 permissionOverwrites: [
                     {
                         id: interaction.guild.id,
